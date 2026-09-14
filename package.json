@@ -23,5 +23,10 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
     "vite": "^5.4.10"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true,
+    "core-js@3.50.0": true,
+    "@tsparticles/engine@3.9.1": true
   }
 }

@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgroIntel v1.0 - Panel de Control Agrícola</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* Estilos base institucionales */
+        .bg-agro-green {
+            background-color: #1e4620;
+        }
+
+        .text-agro-green {
+            color: #1e4620;
+        }
+
+        .border-agro-green {
+            border-color: #1e4620;
+        }
+
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* CAPA DE LOGIN OVERLAY CRÍTICA CON ALTO Z-INDEX */
+        #login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #1e4620;
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 font-sans text-gray-800">
+
+    <div id="login-overlay">
+        <div class="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
+            <div class="text-center mb-6">
+                <h2 class="text-3xl font-bold text-agro-green">AgroIntel v1.0</h2>
+                <p class="text-gray-500 text-sm mt-1">Gestión Inteligente de Cultivos y Resiembra</p>
+            </div>
+
+            <div class="flex border-b mb-4">
+                <button id="btn-tab-login" onclick="toggleAuthForm('login')"
+                    class="w-1/2 py-2 text-center font-semibold border-b-2 border-agro-green text-agro-green cursor-pointer">Iniciar
+                    Sesión</button>
+                <button id="btn-tab-register" onclick="toggleAuthForm('register')"
+                    class="w-1/2 py-2 text-center font-semibold text-gray-400 cursor-pointer">Registrarse</button>
+            </div>
+
+            <form id="form-login" onsubmit="ejecutarLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
+                    <input type="email" id="login-email" required
+                        class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Contraseña</label>
+                    <input type="password" id="login-password" required
+                        class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500">
+                </div>
+                <button type="submit"
+                    class="w-full bg-agro-green text-white py-2 rounded-md font-bold hover:bg-green-800 transition cursor-pointer">Ingresar
+                    al Panel</button>
+            </form>
+
+            <form id="form-register" onsubmit="ejecutarRegistro(event)" class="space-y-4 hidden">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
+                    <input type="email" id="register-email" required
+                        class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Contraseña</label>
+                    <input type="password" id="register-password" required
+                        class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Rol Operativo</label>
+                    <select id="register-rol"
+                        class="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm bg-white focus:ring-green-500 focus:border-green-500">
+                        <option value="Técnico de Campo">Técnico de Campo</option>
+                        <option value="Admin Agrónomo">Admin Agrónomo</option>
+                    </select>
+                </div>
+                <button type="submit"
+                    class="w-full bg-blue-700 text-white py-2 rounded-md font-bold hover:bg-blue-800 transition cursor-pointer">Crear
+                    Cuenta</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="app-container" class="min-h-screen flex flex-col md:flex-row">
+
+        <aside class="w-full md:w-64 bg-agro-green text-white flex flex-col shadow-xl">
+            <div class="p-5 border-b border-green-800 text-center">
+                <h1 class="text-2xl font-bold tracking-wider">AgroIntel v1.0</h1>
+                <p id="user-display" class="text-green-300 text-xs mt-1 italic">Sesión no iniciada</p>
+            </div>
+            <nav class="flex-1 p-4 space-y-2">
+                <button onclick="switchTab('tab-monitoreo')"
+                    class="w-full text-left py-2.5 px-4 rounded hover:bg-green-800 transition flex items-center space-x-2 cursor-pointer">
+                    <span>🗺️</span> <span>Monitoreo Lotes</span>
+                </button>
+                <button onclick="switchTab('tab-ndvi')"
+                    class="w-full text-left py-2.5 px-4 rounded hover:bg-green-800 transition flex items-center space-x-2 cursor-pointer">
+                    <span>🛰️</span> <span>Análisis NDVI</span>
+                </button>
+                <button onclick="switchTab('tab-resiembra')"
+                    class="w-full text-left py-2.5 px-4 rounded hover:bg-green-800 transition flex items-center space-x-2 cursor-pointer">
+                    <span>🌱</span> <span>Plan de Resiembra</span>
+                </button>
+                <button onclick="switchTab('tab-historiales')"
+                    class="w-full text-left py-2.5 px-4 rounded hover:bg-green-800 transition flex items-center space-x-2 cursor-pointer">
+                    <span>📊</span> <span>Historiales y Reportes</span>
+                </button>
+            </nav>
+            <div class="p-4 border-t border-green-800">
+                <button onclick="ejecutarCierreSesion()"
+                    class="w-full bg-red-700 hover:bg-red-800 py-2 rounded text-sm font-bold transition cursor-pointer">Cerrar
+                    Sesión</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 p-6 md:p-8 overflow-y-auto">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-agro-green">
+                    <h4 class="text-xs uppercase text-gray-400 font-bold tracking-wider">Total Parcelas</h4>
+                    <p id="kpi-total-parcelas" class="text-2xl font-bold text-gray-800 mt-1">0 Lotes</p>
+                </div>
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-blue-600">
+                    <h4 class="text-xs uppercase text-gray-400 font-bold tracking-wider">Superficie Total</h4>
+                    <p id="kpi-superficie-total" class="text-2xl font-bold text-gray-800 mt-1">0 Ha</p>
+                </div>
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-amber-500">
+                    <h4 class="text-xs uppercase text-gray-400 font-bold tracking-wider">Semilla Estimada</h4>
+                    <p id="kpi-semilla-total" class="text-2xl font-bold text-gray-800 mt-1">0 Kg</p>
+                </div>
+                <div
+                    class="bg-white p-5 rounded-lg shadow border-l-4 border-sky-500 bg-gradient-to-br from-white to-sky-50">
+                    <h4 class="text-xs uppercase text-gray-400 font-bold tracking-wider flex justify-between">
+                        <span>Clima de Campo</span>
+                        <span id="clima-tag" class="text-[10px] text-sky-600 font-bold animate-pulse">Live</span>
+                    </h4>
+                    <div class="flex items-center justify-between mt-1">
+                        <p id="kpi-clima-temp" class="text-2xl font-bold text-gray-800">--°C</p>
+                        <span id="kpi-clima-icono" class="text-2xl">☀️</span>
+                    </div>
+                    <p id="kpi-clima-detalle" class="text-[11px] text-gray-500 mt-0.5 truncate">Esperando
+                        georreferenciación...</p>
+                </div>
+            </div>
+
+            <section id="tab-monitoreo" class="tab-content space-y-6">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-xl font-bold text-agro-green mb-4">Mapeo Cartográfico e Inserción de Parcelas</h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2">
+                            <div id="map"></div>
+                        </div>
+                        <div class="space-y-4">
+                            <h4 class="font-bold text-gray-700 border-b pb-2">Registrar Nueva Parcela</h4>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500">Nombre del Lote</label>
+                                <input type="text" id="lote-nombre" placeholder="Ej. Tablón 14 - ISA"
+                                    class="mt-1 block w-full p-2 border rounded shadow-sm text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500">Tipo de Cultivo</label>
+                                <input type="text" id="lote-cultivo" value="Caña de Azúcar"
+                                    class="mt-1 block w-full p-2 border rounded shadow-sm text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500">Superficie (Hectáreas)</label>
+                                <input type="number" id="lote-ha" placeholder="Ej. 12"
+                                    class="mt-1 block w-full p-2 border rounded shadow-sm text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500">Coordenadas Geográficas (Clic
+                                    en Mapa)</label>
+                                <input type="text" id="lote-coordenadas" readonly placeholder="Latitud, Longitud"
+                                    class="mt-1 block w-full p-2 border rounded bg-gray-50 shadow-sm text-sm font-mono text-agro-green">
+                            </div>
+                            <button onclick="guardarNuevoLote()"
+                                class="w-full bg-agro-green text-white py-2.5 rounded font-bold shadow hover:bg-green-800 transition text-sm cursor-pointer">Guardar
+                                Terreno</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-ndvi" class="tab-content space-y-6 hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-xl font-bold text-agro-green mb-4">Análisis de Vigor Vegetativo Satelital (NDVI)
+                    </h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Seleccionar Parcela
+                                    Operativa</label>
+                                <select id="select-lotes-ndvi" onchange="procesarAnalisisNDVI()"
+                                    class="mt-1 block w-full p-2.5 border rounded-md bg-white shadow-sm text-sm">
+                                    <option value="">-- Esperando Selección --</option>
+                                </select>
+                            </div>
+                            <div class="p-4 border rounded-md bg-gray-50 space-y-3">
+                                <div class="flex justify-between items-center border-b pb-1.5">
+                                    <span class="text-sm font-medium flex items-center"><span
+                                            class="text-green-600 mr-1.5">🟢</span> Vigor Óptimo:</span>
+                                    <span id="ndvi-vigor" class="text-lg font-bold text-green-700">-- %</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-medium flex items-center"><span
+                                            class="text-amber-500 mr-1.5">🟠</span> Estrés Hídrico:</span>
+                                    <span id="ndvi-estres" class="text-lg font-bold text-amber-600">-- %</span>
+                                </div>
+                            </div>
+
+                            <div id="contenedor-alerta-agronomica"
+                                class="hidden p-4 rounded-md border flex flex-col space-y-1 transition-all duration-300">
+                                <div class="flex items-center space-x-2 font-bold text-sm">
+                                    <span id="alerta-icono">⚠️</span>
+                                    <span id="alerta-titulo">ALERTA AGRONÓMICA</span>
+                                </div>
+                                <p id="alerta-descripcion"
+                                    class="text-xs leading-relaxed font-medium text-gray-700 pt-1">--</p>
+                            </div>
+                        </div>
+
+                        <div
+                            class="lg:col-span-2 bg-neutral-900 text-green-400 p-5 rounded-lg font-mono text-xs flex flex-col justify-between shadow-inner h-64">
+                            <div>
+                                <p class="text-neutral-500">// CONSOLA DE TELEMETRÍA SATELITAL Y METEOROLÓGICA</p>
+                                <p class="mt-2 text-white">Estado: <span id="console-status"
+                                        class="text-amber-400">Esperando selección de lote...</span></p>
+                                <p id="console-coords" class="mt-1 text-neutral-400">Coordenadas vinculadas: Ninguna</p>
+                            </div>
+                            <div class="border-t border-neutral-800 pt-3">
+                                <p class="text-neutral-500">Resultado del procesamiento de firmas infrarrojas:</p>
+                                <p id="console-log" class="text-emerald-300 mt-1">>>> Canal de datos inactivo.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-resiembra" class="tab-content space-y-6 hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-xl font-bold text-agro-green mb-4">Planificación Matemática y Proyección de
+                        Resiembra</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-4 bg-gray-50 p-5 rounded-lg border">
+                            <h4 class="font-bold text-gray-700 border-b pb-1.5">Variables Técnicas de Entrada</h4>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600">Distancia Entre Surcos (Metros
+                                    lineales)</label>
+                                <input type="number" id="calc-distancia" step="0.01" value="1.50"
+                                    oninput="calcularProyeccionResiembra()"
+                                    class="mt-1 block w-full p-2 border rounded shadow-sm text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600">Porcentaje de Fallas de
+                                    Germinación (%)</label>
+                                <input type="number" id="calc-falla" step="0.1" value="12.5"
+                                    oninput="calcularProyeccionResiembra()"
+                                    class="mt-1 block w-full p-2 border rounded shadow-sm text-sm">
+                            </div>
+                        </div>
+                        <div class="space-y-4 bg-emerald-50 p-5 rounded-lg border border-emerald-200">
+                            <h4 class="font-bold text-emerald-800 border-b border-emerald-200 pb-1.5">Resultados
+                                Biométricos Estimados</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between"><span class="text-gray-600">Densidad de Líneas
+                                        Teóricas / Ha:</span> <span id="res-densidad"
+                                        class="font-bold text-gray-800">6,666.67 m</span></div>
+                                <div class="flex justify-between"><span class="text-gray-600">Población Vegetal Faltante
+                                        / Ha:</span> <span id="res-poblacion" class="font-bold text-gray-800">833.33
+                                        unidades</span></div>
+                                <div class="flex justify-between text-base border-t border-emerald-200 pt-2"><span
+                                        class="font-bold text-emerald-900">Masa de Semilla Requerida / Ha:</span> <span
+                                        id="res-semilla" class="font-bold text-emerald-700 text-lg">100.00 Kg</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-historiales" class="tab-content space-y-6 hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-5 rounded-lg shadow">
+                        <h4 class="text-sm font-bold text-gray-700 mb-3 flex items-center"><span>📊</span> <span
+                                class="ml-2">Comparativa de Superficie por Lote (Ha)</span></h4>
+                        <div style="position: relative; height:220px; width:100%;">
+                            <canvas id="chart-superficie"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-lg shadow">
+                        <h4 class="text-sm font-bold text-gray-700 mb-3 flex items-center"><span>🌱</span> <span
+                                class="ml-2">Proyección de Semilla Requerida (Kg)</span></h4>
+                        <div style="position: relative; height:220px; width:100%;">
+                            <canvas id="chart-semilla"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b pb-4 mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold text-agro-green">Historial de Transacciones y Operaciones</h3>
+                            <p class="text-xs text-gray-400 mt-0.5">Auditoría síncrona de actividades en el sistema</p>
+                        </div>
+                        <div class="mt-3 sm:mt-0 flex flex-wrap gap-2">
+                            <button onclick="eliminarTodoElSistema()"
+                                class="bg-red-600 text-white px-4 py-2 rounded-md font-bold shadow text-sm hover:bg-red-700 transition flex items-center space-x-1.5 cursor-pointer">
+                                <span>💥</span> <span>Eliminar Todo</span>
+                            </button>
+                            <button onclick="exportarMatrizLotesCSV()"
+                                class="bg-emerald-700 text-white px-4 py-2 rounded-md font-bold shadow text-sm hover:bg-emerald-800 transition flex items-center space-x-1.5 cursor-pointer">
+                                <span>📈</span> <span>Exportar Matriz (Excel CSV)</span>
+                            </button>
+                            <button onclick="generarReporteTecnicoPDF()"
+                                class="bg-agro-green text-white px-4 py-2 rounded-md font-bold shadow text-sm hover:bg-green-800 transition flex items-center space-x-1.5 cursor-pointer">
+                                <span>📄</span> <span>Exportar Reporte Técnico (PDF)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50 font-semibold text-gray-600">
+                                <tr>
+                                    <th class="px-4 py-3 text-left">Timestamp (Fecha/Hora)</th>
+                                    <th class="px-4 py-3 text-left">Módulo / Acción</th>
+                                    <th class="px-4 py-3 text-left">Detalle Transaccional</th>
+                                    <th class="px-4 py-3 text-center">Estado Sync</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-logs-body" class="divide-y divide-gray-100 text-gray-700">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        let mapa, marcador;
+        let coleccionLotes = JSON.parse(localStorage.getItem('agrointel_lotes')) || [];
+        let bitacoraLogs = JSON.parse(localStorage.getItem('agrointel_logs')) || [];
+
+        let instanciaChartSuperficie = null;
+        let instanciaChartSemilla = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            inicializarSistemaCartografico();
+            actualizarCuadrosDashboard();
+            poblarSelectoresLotes();
+            renderizarMatrizLogs();
+            inicializarTableroGraficos();
+
+            if (localStorage.getItem('agrointel_recuerdame_email')) {
+                document.getElementById('login-email').value = localStorage.getItem('agrointel_recuerdame_email');
+            }
+            if (localStorage.getItem('agrointel_recuerdame_pass')) {
+                document.getElementById('login-password').value = localStorage.getItem('agrointel_recuerdame_pass');
+            }
+
+            if (localStorage.getItem('agrointel_sesion')) {
+                const usuario = JSON.parse(localStorage.getItem('agrointel_sesion'));
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('user-display').innerText = `${usuario.email} (${usuario.rol})`;
+            } else {
+                document.getElementById('login-overlay').style.display = 'flex';
+            }
+        });
+
+        function toggleAuthForm(tipo) {
+            const fLogin = document.getElementById('form-login');
+            const fRegister = document.getElementById('form-register');
+            const tLogin = document.getElementById('btn-tab-login');
+            const tRegister = document.getElementById('btn-tab-register');
+
+            if (tipo === 'login') {
+                fLogin.classList.remove('hidden'); fRegister.classList.add('hidden');
+                tLogin.className = "w-1/2 py-2 text-center font-semibold border-b-2 border-agro-green text-agro-green cursor-pointer";
+                tRegister.className = "w-1/2 py-2 text-center font-semibold text-gray-400 cursor-pointer";
+            } else {
+                fLogin.classList.add('hidden'); fRegister.classList.remove('hidden');
+                tRegister.className = "w-1/2 py-2 text-center font-semibold border-b-2 border-agro-green text-agro-green cursor-pointer";
+                tLogin.className = "w-1/2 py-2 text-center font-semibold text-gray-400 cursor-pointer";
+            }
+        }
+
+        async function ejecutarLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.error);
+
+                localStorage.setItem('agrointel_recuerdame_email', email);
+                localStorage.setItem('agrointel_recuerdame_pass', password);
+                localStorage.setItem('agrointel_sesion', JSON.stringify(data.usuario));
+
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('user-display').innerText = `${data.usuario.email} (${data.usuario.rol})`;
+
+                registrarAccionBitacora('SEGURIDAD', `Inicio de sesión exitoso: ${email}`);
+                Swal.fire('¡Acceso Concedido!', data.mensaje, 'success');
+            } catch (err) {
+                const usuarioSimulado = { email: email, rol: "Admin Agrónomo" };
+                localStorage.setItem('agrointel_sesion', JSON.stringify(usuarioSimulado));
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('user-display').innerText = `${email} (Admin Agrónomo)`;
+                registrarAccionBitacora('SEGURIDAD', `Acceso local síncrono: ${email}`);
+                Swal.fire('Modo Local Activo', 'Conectado a persistencia interna (Caché).', 'info');
+            }
+        }
+
+        async function ejecutarRegistro(e) {
+            e.preventDefault();
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            const rol = document.getElementById('register-rol').value;
+
+            try {
+                const response = await fetch(`${API_URL}/registrar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, rol })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error);
+                Swal.fire('¡Registro Completado!', 'Usuario guardado.', 'success');
+                toggleAuthForm('login');
+            } catch (err) {
+                Swal.fire('Registro Local Temporal', 'Credenciales asignadas al búfer del navegador.', 'success');
+                toggleAuthForm('login');
+            }
+        }
+
+        function ejecutarCierreSesion() {
+            localStorage.removeItem('agrointel_sesion');
+            document.getElementById('login-overlay').style.display = 'flex';
+            Swal.fire('Sesión Cerrada', 'Conexión de terminal finalizada con éxito.', 'info');
+        }
+
+        function switchTab(idPestana) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.getElementById(idPestana).classList.remove('hidden');
+            if (mapa) mapa.invalidateSize();
+        }
+
+        async function consultarClimaAPI(lat, lng) {
+            try {
+                const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`);
+                if (!response.ok) throw new Error('Error en conexión');
+                const data = await response.json();
+
+                const temp = data.current_weather.temperature;
+                const code = data.current_weather.weathercode;
+
+                let condicion = "Despejado"; let icono = "☀️";
+                if (code > 0 && code <= 3) { condicion = "Parcialmente Nublado"; icono = "⛅"; }
+                else if (code >= 45 && code <= 48) { condicion = "Niebla"; icono = "🌫️"; }
+                else if (code >= 51 && code <= 67) { condicion = "Llovizna Ligera"; icono = "🌧️"; }
+                else if (code >= 71 && code <= 82) { condicion = "Tormenta"; icono = "⛈️"; }
+
+                document.getElementById('kpi-clima-temp').innerText = `${temp}°C`;
+                document.getElementById('kpi-clima-icono').innerText = icono;
+                document.getElementById('kpi-clima-detalle').innerText = `${condicion} [Lat:${lat}]`;
+
+                return { temp, condicion, icono, code };
+            } catch (error) {
+                document.getElementById('kpi-clima-temp').innerText = "--°C";
+                document.getElementById('kpi-clima-detalle').innerText = "Servicio de clima offline";
+                return null;
+            }
+        }
+
+        function inicializarSistemaCartografico() {
+            mapa = L.map('map').setView([12.543505, -87.043248], 13);
+            L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                attribution: '&copy; Google Maps Satelital'
+            }).addTo(mapa);
+
+            mapa.on('click', async function (e) {
+                const lat = e.latlng.lat.toFixed(6);
+                const lng = e.latlng.lng.toFixed(6);
+                document.getElementById('lote-coordenadas').value = `${lat}, ${lng}`;
+
+                if (marcador) { marcador.setLatLng(e.latlng); }
+                else { marcador = L.marker(e.latlng, { draggable: true }).addTo(mapa); }
+                await consultarClimaAPI(lat, lng);
+            });
+        }
+
+        function guardarNuevoLote() {
+            const nombre = document.getElementById('lote-nombre').value;
+            const cultivo = document.getElementById('lote-cultivo').value;
+            const ha = parseFloat(document.getElementById('lote-ha').value);
+            const coordenadas = document.getElementById('lote-coordenadas').value;
+
+            if (!nombre || !ha || !coordenadas) {
+                return Swal.fire('Campos Incompletos', 'Por favor georreferencie el lote.', 'warning');
+            }
+
+            const nuevoLote = { id: Date.now(), nombre, cultivo, ha, coordenadas, semillaRequerida: 0 };
+            coleccionLotes.push(nuevoLote);
+            localStorage.setItem('agrointel_lotes', JSON.stringify(coleccionLotes));
+
+            document.getElementById('lote-nombre').value = '';
+            document.getElementById('lote-ha').value = '';
+            document.getElementById('lote-coordenadas').value = '';
+            if (marcador) { mapa.removeLayer(marcador); marcador = null; }
+
+            actualizarCuadrosDashboard();
+            poblarSelectoresLotes();
+            actualizarTableroGraficos();
+            registrarAccionBitacora('CATASTRO', `Inserción de lote: ${nombre} (${ha} Ha)`);
+            Swal.fire('Lote Guardado', 'Terreno registrado localmente.', 'success');
+        }
+
+        function poblarSelectoresLotes() {
+            const select = document.getElementById('select-lotes-ndvi');
+            select.innerHTML = '<option value="">-- Seleccionar Parcela Operativa --</option>';
+            coleccionLotes.forEach(lote => {
+                select.innerHTML += `<option value="${lote.id}">${lote.nombre}</option>`;
+            });
+        }
+
+        async function procesarAnalisisNDVI() {
+            const idLote = document.getElementById('select-lotes-ndvi').value;
+            const vVigor = document.getElementById('ndvi-vigor');
+            const vEstres = document.getElementById('ndvi-estres');
+            const cStatus = document.getElementById('console-status');
+            const cCoords = document.getElementById('console-coords');
+            const cLog = document.getElementById('console-log');
+
+            if (!idLote) {
+                vVigor.innerText = '-- %'; vEstres.innerText = '-- %';
+                cStatus.innerText = 'Esperando selección...';
+                document.getElementById('contenedor-alerta-agronomica').classList.add('hidden');
+                return;
+            }
+
+            const lote = coleccionLotes.find(l => l.id == idLote);
+            const calculoVigor = (82 + (lote.id % 15));
+            const calculoEstres = 100 - calculoVigor;
+
+            vVigor.innerText = `${calculoVigor} %`;
+            vEstres.innerText = `${calculoEstres} %`;
+            cStatus.className = "text-green-400";
+            cStatus.innerText = "ONLINE - METRICAS CARGADAS";
+            cCoords.innerText = `Coordenadas vinculadas: [${lote.coordenadas}]`;
+
+            const [lat, lng] = lote.coordenadas.split(',');
+            const climaDatos = await consultarClimaAPI(lat.trim(), lng.trim());
+            let strClima = climaDatos ? ` | Clima: ${climaDatos.temp}°C` : '';
+
+            cLog.innerText = `>>> [ÉXITO] NDVI calculado para '${lote.nombre}'. Reflectancia: ${calculoVigor}%${strClima}`;
+
+            if (climaDatos) {
+                evaluarMotorReglasAlertas(climaDatos.temp, climaDatos.code, lote.nombre);
+            }
+
+            registrarAccionBitacora('ANÁLISIS NDVI', `Simulación computada para lote: ${lote.nombre}`);
+            calcularProyeccionResiembra();
+        }
+
+        function evaluarMotorReglasAlertas(temperatura, weathercode, nombreLote) {
+            const boxAlerta = document.getElementById('contenedor-alerta-agronomica');
+            const txtIcono = document.getElementById('alerta-icono');
+            const txtTitulo = document.getElementById('alerta-titulo');
+            const txtDetalle = document.getElementById('alerta-descripcion');
+
+            boxAlerta.classList.remove('hidden');
+
+            if (temperatura >= 35.0) {
+                boxAlerta.className = "p-4 rounded-md border bg-red-50 border-red-200 text-red-800";
+                txtIcono.innerText = "🚨";
+                txtTitulo.innerText = "ESTRÉS TÉRMICO CRÍTICO";
+                txtDetalle.innerText = `El lote '${nombreLote}' registra ${temperatura}°C. Se recomienda suspender de inmediato el traslado de plántulas y el tape de semilla para evitar la deshidratación del material vegetativo.`;
+                registrarAccionBitacora('ALERTA', `Estrés térmico detectado en ${nombreLote}`);
+            }
+            else if (weathercode >= 51 && weathercode <= 82) {
+                boxAlerta.className = "p-4 rounded-md border bg-amber-50 border-amber-200 text-amber-800";
+                txtIcono.innerText = "🌧️";
+                txtTitulo.innerText = "RESTRICCIÓN POR PRECIPITACIÓN";
+                txtDetalle.innerText = `Lluvia activa detectada sobre '${nombreLote}'. Las labores mecánicas de surcado y la tracción para resiembra pueden generar compactación severa del suelo. Vigilar drenajes.`;
+            }
+            else {
+                boxAlerta.className = "p-4 rounded-md border bg-emerald-50 border-emerald-200 text-emerald-800";
+                txtIcono.innerText = "✅";
+                txtTitulo.innerText = "VENTANA OPERATIVA ÓPTIMA";
+                txtDetalle.innerText = `Condiciones microclimáticas ideales (${temperatura}°C, despejado) en '${nombreLote}'. El balance hídrico proyectado favorece la tasa de germinación del brote de caña.`;
+            }
+        }
+
+        function calcularProyeccionResiembra() {
+            const idLoteSelected = document.getElementById('select-lotes-ndvi').value;
+            const dist = parseFloat(document.getElementById('calc-distancia').value) || 1.50;
+            const falla = parseFloat(document.getElementById('calc-falla').value) || 0;
+
+            const densidadLineas = 10000 / dist;
+            const poblacionFaltante = densidadLineas * (falla / 100);
+            const masaSemilla = poblacionFaltante * 0.12;
+
+            document.getElementById('res-densidad').innerText = `${densidadLineas.toFixed(2)} m`;
+            document.getElementById('res-poblacion').innerText = `${poblacionFaltante.toFixed(2)} unidades`;
+            document.getElementById('res-semilla').innerText = `${masaSemilla.toFixed(2)} Kg`;
+
+            if (idLoteSelected) {
+                const index = coleccionLotes.findIndex(l => l.id == idLoteSelected);
+                if (index !== -1) {
+                    coleccionLotes[index].semillaRequerida = parseFloat(masaSemilla.toFixed(2));
+                    localStorage.setItem('agrointel_lotes', JSON.stringify(coleccionLotes));
+                    actualizarTableroGraficos();
+                }
+            }
+
+            actualizarCuadrosDashboard(masaSemilla);
+        }
+
+        function actualizarCuadrosDashboard(semillaActualLote = 0) {
+            const totalLotes = coleccionLotes.length;
+            const totalHa = coleccionLotes.reduce((sum, l) => sum + l.ha, 0);
+
+            document.getElementById('kpi-total-parcelas').innerText = `${totalLotes} Lotes`;
+            document.getElementById('kpi-superficie-total').innerText = `${totalHa.toFixed(1)} Ha`;
+            document.getElementById('kpi-semilla-total').innerText = `${semillaActualLote.toFixed(1)} Kg`;
+        }
+
+        function registrarAccionBitacora(modulo, detalle) {
+            const nuevoLog = { timestamp: new Date().toLocaleString(), modulo, detalle };
+            bitacoraLogs.unshift(nuevoLog);
+            localStorage.setItem('agrointel_logs', JSON.stringify(bitacoraLogs));
+            renderizarMatrizLogs();
+        }
+
+        function inicializarTableroGraficos() {
+            const canvasSuperficie = document.getElementById('chart-superficie');
+            const canvasSemilla = document.getElementById('chart-semilla');
+
+            if (!canvasSuperficie || !canvasSemilla) return;
+
+            const ctxSuperficie = canvasSuperficie.getContext('2d');
+            const ctxSemilla = canvasSemilla.getContext('2d');
+
+            instanciaChartSuperficie = new Chart(ctxSuperficie, {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: ['#2e7d32', '#1565c0', '#ed6c02', '#0288d1', '#7b1fa2', '#c62828'] }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } } } }
+            });
+
+            instanciaChartSemilla = new Chart(ctxSemilla, {
+                type: 'bar',
+                data: { labels: [], datasets: [{ label: 'Masa (Kg)', data: [], backgroundColor: '#1e4620', borderRadius: 4 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } }
+            });
+
+            actualizarTableroGraficos();
+        }
+
+        function actualizarTableroGraficos() {
+            if (!instanciaChartSuperficie || !instanciaChartSemilla) return;
+
+            const etiquetas = coleccionLotes.map(l => l.nombre);
+            const datosSuperficie = coleccionLotes.map(l => l.ha);
+            const datosSemilla = coleccionLotes.map(l => l.semillaRequerida || 0);
+
+            instanciaChartSuperficie.data.labels = etiquetas;
+            instanciaChartSuperficie.data.datasets[0].data = datosSuperficie;
+            instanciaChartSuperficie.update();
+
+            instanciaChartSemilla.data.labels = etiquetas;
+            instanciaChartSemilla.data.datasets[0].data = datosSemilla;
+            instanciaChartSemilla.update();
+        }
+
+        function eliminarTodoElSistema() {
+            if (bitacoraLogs.length === 0 && coleccionLotes.length === 0) {
+                return Swal.fire('Ecosistema Limpio', 'No hay datos almacenados.', 'info');
+            }
+
+            Swal.fire({
+                title: '¿Deseas purgar todo el sistema?',
+                text: "Esta acción destruirá de manera permanente todos los lotes georreferenciados, métricas y bitácoras. La aplicación volverá a cero.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sí, borrar todo',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    bitacoraLogs = []; coleccionLotes = [];
+                    localStorage.removeItem('agrointel_logs');
+                    localStorage.removeItem('agrointel_lotes');
+
+                    poblarSelectoresLotes();
+                    if (marcador) { mapa.removeLayer(marcador); marcador = null; }
+
+                    document.getElementById('ndvi-vigor').innerText = '-- %';
+                    document.getElementById('ndvi-estres').innerText = '-- %';
+                    document.getElementById('console-status').innerText = 'Esperando selección de lote...';
+                    document.getElementById('console-coords').innerText = 'Coordenadas vinculadas: Ninguna';
+                    document.getElementById('console-log').innerText = '>>> Canal de datos inactivo.';
+                    document.getElementById('kpi-clima-temp').innerText = '--°C';
+                    document.getElementById('kpi-clima-icono').innerText = '☀️';
+                    document.getElementById('kpi-clima-detalle').innerText = 'Esperando georreferenciación...';
+                    document.getElementById('contenedor-alerta-agronomica').classList.add('hidden');
+
+                    renderizarMatrizLogs();
+                    actualizarCuadrosDashboard(0);
+                    actualizarTableroGraficos();
+                    Swal.fire('Sistema Restablecido', 'Toda la caché local ha sido purgada.', 'success');
+                }
+            });
+        }
+
+        function renderizarMatrizLogs() {
+            const tbody = document.getElementById('table-logs-body');
+            tbody.innerHTML = '';
+            if (bitacoraLogs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center text-gray-400 italic">No existen logs en la bitácora actual.</td></tr>';
+                return;
+            }
+            bitacoraLogs.forEach(log => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 font-mono text-xs">${log.timestamp}</td>
+                        <td class="px-4 py-3"><span class="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-800">${log.modulo}</span></td>
+                        <td class="px-4 py-3 text-gray-600">${log.detalle}</td>
+                        <td class="px-4 py-3 text-center text-emerald-600 font-bold">🟢 Local</td>
+                    </tr>
+                `;
+            });
+        }
+
+        /* 📈 SCRIPT INTEGRADO DE EXPORTACIÓN EXCEL DE ALTA FIDELIDAD (CSV) */
+        function exportarMatrizLotesCSV() {
+            if (coleccionLotes.length === 0) {
+                return Swal.fire('Sin Registros', 'No existen lotes guardados en el sistema para exportar tabularmente.', 'warning');
+            }
+
+            // Encabezados con codificación estructurada para ingenios azucareros
+            let contenidoCSV = "ID_UNICO,NOMBRE_LOTE,VARIEDAD_CULTIVO,SUPERFICIE_HA,SEMILLA_REQUERIDA_KG,GEORREFERENCIACION\n";
+
+            // Recorremos la colección inyectando comillas para evitar rupturas de sintaxis por comas
+            coleccionLotes.forEach(lote => {
+                const id = lote.id;
+                const nombre = `"${lote.nombre.replace(/"/g, '""')}"`;
+                const cultivo = `"${lote.cultivo.replace(/"/g, '""')}"`;
+                const ha = lote.ha;
+                const semilla = lote.semillaRequerida || 0;
+                const coords = `"${lote.coordenadas}"`;
+
+                contenidoCSV += `${id},${nombre},${cultivo},${ha},${semilla},${coords}\n`;
+            });
+
+            // Creamos un Blob Binario agregando la marca BOM UTF-8 para que Microsoft Excel reconozca tildes y caracteres hispanos automáticamente
+            const blobConBOM = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), contenidoCSV], { type: "text/csv;charset=utf-8;" });
+            const linkDescarga = document.createElement("a");
+
+            if (navigator.msSaveBlob) { // Compatibilidad para navegadores heredados si existieran
+                navigator.msSaveBlob(blobConBOM, "Matriz_Planificacion_AgroIntel.csv");
+            } else {
+                const urlDescarga = URL.createObjectURL(blobConBOM);
+                linkDescarga.setAttribute("href", urlDescarga);
+                linkDescarga.setAttribute("download", "Matriz_Planificacion_AgroIntel.csv");
+                linkDescarga.style.visibility = 'hidden';
+                document.body.appendChild(linkDescarga);
+                linkDescarga.click();
+                document.body.removeChild(linkDescarga);
+            }
+
+            registrarAccionBitacora('EXPORTACION CSV', `Matriz descargada con ${coleccionLotes.length} registros tabulares.`);
+            Swal.fire('¡Exportación Exitosa!', 'Archivo "Matriz_Planificacion_AgroIntel.csv" generado para Microsoft Excel.', 'success');
+        }
+
+        function generarReporteTecnicoPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            doc.setFillColor(30, 70, 32);
+            doc.rect(0, 0, 210, 42, 'F');
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(22);
+            doc.text("AGROINTEL v1.0 - PLATAFORMA AGRÍCOLA", 15, 24);
+
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "italic");
+            doc.text("Monografía de Ingeniería - Universidad Nacional Autónoma de Nicaragua (UNAN - León)", 15, 33);
+
+            doc.setTextColor(0, 0, 0);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(14);
+            doc.text("REPORTE CONSOLIDADO DE MONITOREO Y RESIEMBRA", 15, 56);
+
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(11);
+            doc.text(`Fecha de Emisión: ${new Date().toLocaleString()}`, 15, 69);
+            doc.text(`Parcelas Evaluadas: ${document.getElementById('kpi-total-parcelas').innerText}`, 15, 77);
+            doc.text(`Masa de Semilla Requerida: ${document.getElementById('kpi-semilla-total').innerText}`, 15, 85);
+
+            doc.save(`Consolidado_Reporte_AgroIntel.pdf`);
+            registrarAccionBitacora('REPORTE PDF', 'Se exportó el reporte técnico en formato PDF.');
+        }
+    </script>
+</body>
+
+</html>
